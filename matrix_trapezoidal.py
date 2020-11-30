@@ -11,26 +11,41 @@ import matplotlib.pyplot as plt
 import qutip as qutip
 from solver import Solver
 
-
-
 class CN_Solver(Solver):
 
-    def __init__(self, simulation_time, time_step, Hamiltonian, init_state):
+    def __init__(self, simulation_time, time_step, Hamiltonian, dimension, order, init_state):
 
-       super().__init__(simulation_time, time_step, Hamiltonian, init_state)
+       super().__init__(simulation_time, time_step, Hamiltonian, dimension, init_state)
+       self.order = order
        
     def evolve(self):
         
-        I_DIM = sp.sparse.identity(self.dim).toarray()
-
-        factor = 1j * self.time_step / 2
-
         self.psi_t[:, 0] = self.psi0
+
+        H_pow_k = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
 
         for i in range(1, self.num_iterations):
 
-            self.psi_t[:, i] = np.matmul(np.matmul(la.inv(I_DIM + factor * self.H(self.t[i])), (I_DIM - factor * self.H(self.t[i]))), self.psi_t[:, i - 1])
+            backwards_term = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
+            forwards_term = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
+
+            for k in range(0, self.order + 1):
+
+                factor_kb = (1.0 / np.math.factorial(k)) * ((1j * self.time_step / 2) ** k)
+                factor_kf = (1.0 / np.math.factorial(k)) * ((-1j * self.time_step / 2) ** k)
+                
+                H_pow_k = np.linalg.matrix_power(self.H(self.t[i]), k)
+            
+                backwards_term += (factor_kb * H_pow_k)
+                forwards_term += (factor_kf * H_pow_k)
+
+            self.psi_t[:, i] = np.matmul(np.matmul(la.inv(backwards_term), forwards_term), self.psi_t[:, i - 1])
    
+    def run_simulation(self):
+
+        self.evolve()
+        self.plot_ground_state()
+
 class TISE_Solver(Solver):
 
     def __init__(self, simulation_time, time_step, Hamiltonian, init_state):
