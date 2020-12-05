@@ -9,6 +9,7 @@ import scipy.linalg as la
 import matplotlib.pyplot as plt
 
 import qutip as qutip
+from solver import Solver
 
 def spectral_norm(H):
 
@@ -28,97 +29,96 @@ class Circuit_Solver:
         self.simulatin_time = simulation_time
         self.dim = self.Hamiltonian.shape[0]
 
-class Dyson_Series_Solver:
+class Dyson_Series_Solver(Solver):
 
-    def __init__(self, order, simulation_time, time_segments, time_steps, Hamiltonian):
+    def __init__(self, order, start_time, simulation_time, time_steps, time_segments, Hamiltonian, dimension, initial_state):
 
         self.K = order
         self.T = simulation_time
-        self.r = time_segments
+        self.t0 = start_time
         self.M = time_steps
-        self.H = Hamiltonian
+        self.r = time_segments
+        
+        super().__init__(simulation_time, (1.0/self.M), Hamiltonian, dimension, initial_state)
 
-        #self.psi0 = init_state
-        self.dim = 3
-
+        # Override the default Solver settings
         self.num_iterations = self.r * self.M
-        self.psi_t = mat.zeros((self.dim, self.r), dtype = np.cdouble)
+
+        #self.t = np.linspace(0, simulation_time, self.num_iterations)
+        
+        self.t = np.linspace(self.t0, self.simulation_time, self.r)
+        self.psi_t = np.ndarray(self.r, dtype = qutip.Qobj)
+        #self.psi_t = np.ndarray(self.num_iterations, dtype = qutip.Qobj)
+        self.norm_t = np.ndarray((self.dim, self.r), dtype = np.double)
 
     def evolve(self):
 
-        U = mat.zeros((3, 3), dtype = np.cdouble)
+        time_scale = (self.T / (self.r * self.M))
+        I_DIM = qutip.qeye(self.dim)
+        for s in range(0, self.r):
 
-        for k in range(1, self.K + 1):
+            print("CURRENT TIME SEGMENT = %d" % s)
 
-            print("k = %d" % k)
-            time_variables = np.zeros(k, dtype = np.int)
-            prefactor = ((-1j * self.T / self.r) ** k) / (self.M ** k * np.math.factorial(k))
+            segment_start_time = self.t0 + (s * self.T / self.r)
+            segment_stop_time = self.t0 + (s + 1) * (self.T / self.r)
 
-            total_iterations = self.M ** k
+            time_segment = np.linspace(segment_start_time, segment_stop_time, num = self.M)
 
-            print(prefactor)
-            it = 0
-
-            U_tilde = mat.zeros((3, 3), dtype = np.cdouble)
-            while it < total_iterations:
-
-                if it % (total_iterations / 100) == 0:
-                    print("ITERATION = %d" % it)
-                for tk in range(0, k):
-
-                    if tk == 0:
-                        time_variables[tk] = (it % self.M)
-                    else:
-                        time_variables[tk] = (it / (self.M ** tk))
-                #print(time_variables)
-                ordered_time_var = np.sort(time_variables)[::-1]
-                #print("TIME VAR = " + str(time_variables))
-                #print("TIME ORDERED TIME VAR = " + str(ordered_time_var))
-
-                U_temp = sp.sparse.identity(3).toarray()
-                for tk in range(0, k):
-
-                    #print("H(%d) = %s" % (tk, str(self.H(ordered_time_var[tk]))))
-                    U_temp = np.matmul(U_temp, self.H(ordered_time_var[tk]))
+            print("INTERVAL: [%lf --> %lf)" % (segment_start_time, segment_stop_time))
+            print(time_segment)
             
-                U_tilde += U_temp
-                #print(U_tilde)
-                it += 1
+            U = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
+            U = qutip.Qobj(shape = (self.dim, self.dim))
 
-            U += (prefactor * U_tilde)
-            print(U)
-        I_DIM = sp.sparse.identity(3).toarray()
-        U += I_DIM
+            for k in range(1, self.K + 1):
 
-        print("FINAL U")
-        print(U)
+                print("ORDER k = %d" % k)
+                time_variables = np.zeros(k, dtype = np.int)
+                prefactor = ((-1j * self.T / self.r) ** k) / (self.M ** k * np.math.factorial(k))
 
-'''
-            while not compare_arrays(time_variables[0 : k], [self.M] * k):
+                total_iterations = self.M ** k
 
-                for tk in range(0, k):
+                it = 0
 
-                    print(time_variables[0 : k])
+                U_tilde = qutip.Qobj(shape = (self.dim, self.dim))
+                while it < total_iterations:
 
-            for tk in range(0, k):
+                    if it % (100) == 0:
+                        print("ITERATION = %d" % it)
+                    for j in range(0, k):
 
-                iterations = 0
+                        if j == 0:
+                            #time_variables[j] = time_segment[it % self.M]
+                            time_variables[j] = it % self.M
+                        else:
+                            #print("HERE")
+                            print(it / (self.M ** j))
+                            #time_variables[j] = time_segment[int(it / (self.M ** j))]
+                            time_variables[j] = it / (self.M ** j)
+                    print(time_variables)
+                    #ordered_time_var = np.sort(time_variables)[::-1]
+                    #print("TIME VAR = " + str(time_variables))
+                    #print("TIME ORDERED TIME VAR = " + str(ordered_time_var))
 
-                print(time_variables[0 : k])
-                print([self.M] * k)
+                    #U_temp = I_DIM
+                    #for tk in range(0, k):
 
-                print(compare_arrays(time_variables[0 : k], [self.M] * k))
+                        #print("H(%d) = %s" % (tk, str(self.H(ordered_time_var[tk]))))
+                        #U_temp = U_temp * self.H(ordered_time_var[tk])
+                        #U_temp = np.matmul(U_temp, self.H(ordered_time_var[tk]))
                 
-                while time_variables[tk] != (self.M):
-                    print(time_variables[0 : k])
-                    time_variables[tk] += 1
-                    iterations += 1
-'''
-            #    for jk in range(0, k):
+                    #U_tilde += U_temp
+                    #print(U_tilde)
+                    it += 1
 
-            #        
-
-            #        time_variables[jk] += 1
+                #U += (prefactor * U_tilde)
+                #print(U)
+            
+            #U += I_DIM
+            #self.psi_t[s] = U * self.psi0
+        '''
+        #print("FINAL U")
+        #print(U)
 
 def circuit_main():
 
@@ -215,54 +215,4 @@ def circuit_main():
                         U_tilde += beta_j * V_j
 
     print(U_tilde)
-
-def ds_main():
-
-    H_TI = mat.asmatrix([[1, 2, 0], [2, 0, 2], [0, 2, -1]])
-
-    solver = Dyson_Series_Solver(order = 6, simulation_time = 1, time_segments = 4, time_steps = 10, Hamiltonian = H_TI_func)
-
-    solver.evolve()
-
-'''
-    for k in range(0, K + 1):
-
-        M_pow_k = M ** k
-        minus_i_pow_k = (-1j) ** k
-        gamma_pow_k = (gamma * T / r) ** k
-
-        for l1 in range(0, L):
-
-            for l2 in range(0, L):
-
-                for l3 in range(0, L):
-
-                    print("j = (k, (l1, l2, l3)) = (%d, (%d, %d, %d))" % (k, l1, l2, l3))
-                    for j1 in range(0, M):
-
-                        for j2 in range(j1, M):
-
-                            for j3 in range(j2, M):
-
-                                if time_ordering(j1, j2, j3):
-
-                                    counter_array = np.asarray([j1, j2, j3])
-                                    num_occurrences = np.bincount(counter_array)
-
-                                    repetitions = np.extract(num_occurrences > 0, num_occurrences)
-
-                                    repetition_factor = 1
-                                    for i in repetitions:
-                                        repetition_factor *= np.math.factorial(i)
-
-                                    #print(repetition_factor)
-                                    beta_j = (gamma_pow_k) / (M_pow_k * repetition_factor)
-
-                                    temp = np.matmul(H_ARRAY[l2], H_ARRAY[l1])
-
-                                    V_j = minus_i_pow_k * np.matmul(H_ARRAY[l3], temp)
-
-                                    U_tilde += (beta_j * V_j)
-                                    #print(U_tilde)
-                                    #print("j = (k, (l1, l2, l3), (j1, j2, j3)) = (%d, (%d, %d, %d), (%d, %d, %d))" % (k, l1, l2, l3, j1, j2, j3))
-            print(U_tilde)         
+    '''

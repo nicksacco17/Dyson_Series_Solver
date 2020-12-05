@@ -25,7 +25,8 @@ class Solver:
         # Computed Parameters
         self.num_iterations = int(self.simulation_time / self.time_step)
         self.t = np.linspace(0, simulation_time, self.num_iterations)
-        self.psi_t = mat.zeros((self.dim, self.num_iterations), dtype = np.cdouble)
+        self.psi_t = np.ndarray(self.num_iterations, dtype = qutip.Qobj)
+        self.norm_t = np.ndarray((self.dim, self.num_iterations), dtype = np.double)
 
     def param_print(self):
 
@@ -33,6 +34,7 @@ class Solver:
         print("SIMULATION TIME = %d" % self.simulation_time)
         print("TIME STEP = %e" % self.time_step)
         print("NUMBER OF ITERATIONS = %d" % self.num_iterations)
+        print("NUMBER OF STATES IN SIMULATION = %d" % len(self.psi_t) )
 
     def normalization_check(self):
 
@@ -62,28 +64,26 @@ class Solver:
 
     def plot_basis_state(self, n):
 
-        current_state = np.zeros(self.num_iterations, dtype = np.double)
-
-        for k in range(0, self.num_iterations):
-            current_state[k] = (np.abs(self.psi_t[n, k]) ** 2)
-
-        plt.plot(self.t, current_state, markersize = 2.0, linewidth = 2.0, label = '|%d>' % n)
+        plt.plot(self.t, self.norm_t[n, :], markersize = 2.0, linewidth = 2.0, label = '|%d>' % n)
         plt.legend()
         plt.title("Qubit Dynamics: State Probabilities vs. Time")
         plt.xlabel("Time (sec)")
         plt.ylabel("Probability")
         plt.show()
 
-    def plot(self):
-
+    def calc_prob(self):
         for n in range(0, self.dim):
 
-            current_state = np.zeros(self.num_iterations, dtype = np.double)
-           
-            for k in range(0, self.num_iterations):
-                current_state[k] = (np.abs(self.psi_t[n, k]) ** 2)
+            for t in range(0, len(self.psi_t)):
 
-            plt.plot(self.t, current_state, markersize = 2.0, linewidth = 2.0, label = '|%d>' % n)
+                self.norm_t[n][t] = np.abs(self.psi_t[t][n]) ** 2
+
+    def plot(self):
+
+        self.calc_prob()
+        for n in range(0, self.dim):
+
+            plt.plot(self.t, self.norm_t[n, :], markersize = 2.0, linewidth = 2.0, label = '|%d>' % n)
 
         plt.legend()
         plt.title("Qubit Dynamics: State Probabilities vs. Time")

@@ -17,34 +17,33 @@ class CN_Solver(Solver):
 
        super().__init__(simulation_time, time_step, Hamiltonian, dimension, init_state)
        self.order = order
+       self.psi_t[0] = self.psi0
        
     def evolve(self):
         
-        self.psi_t[:, 0] = self.psi0
-
-        H_pow_k = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
+        H_pow_k = qutip.Qobj(shape = (self.dim, self.dim))
 
         for i in range(1, self.num_iterations):
 
-            backwards_term = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
-            forwards_term = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
+            backwards_term = qutip.Qobj(shape = (self.dim, self.dim))
+            forwards_term = qutip.Qobj(shape = (self.dim, self.dim))
 
             for k in range(0, self.order + 1):
 
                 factor_kb = (1.0 / np.math.factorial(k)) * ((1j * self.time_step / 2) ** k)
                 factor_kf = (1.0 / np.math.factorial(k)) * ((-1j * self.time_step / 2) ** k)
                 
-                H_pow_k = np.linalg.matrix_power(self.H(self.t[i]), k)
+                H_pow_k = self.H(self.t[i]) ** k
             
                 backwards_term += (factor_kb * H_pow_k)
                 forwards_term += (factor_kf * H_pow_k)
 
-            self.psi_t[:, i] = np.matmul(np.matmul(la.inv(backwards_term), forwards_term), self.psi_t[:, i - 1])
-   
+            self.psi_t[i] = (backwards_term.inv() * forwards_term) * self.psi_t[i - 1]
+        
     def run_simulation(self):
 
         self.evolve()
-        self.plot_ground_state()
+        self.plot()
 
 class TISE_Solver(Solver):
 
