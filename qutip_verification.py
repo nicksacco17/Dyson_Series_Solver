@@ -32,7 +32,7 @@ class ME_Solver(Solver):
         #print(len(self.psi_t))
         result = qutip.mesolve(self.H, self.psi0, self.t, c_ops = None, e_ops = None, options = QME_OPTIONS, args = None)
 
-        print(result.states[-1])
+        #print(result.states[-1])
         for t in range(0, len(result.states)):
 
             self.psi_t[t] = result.states[t]

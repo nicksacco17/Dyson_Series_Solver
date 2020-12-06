@@ -83,7 +83,7 @@ class Dyson_Series_Solver(Solver):
                 U_tilde = qutip.Qobj(shape = (self.dim, self.dim))
                 while it < total_iterations:
 
-                    if it % 1000 == 0:
+                    if it % 10000 == 0:
                             print(it)
                     for j in range(0, k):
 
