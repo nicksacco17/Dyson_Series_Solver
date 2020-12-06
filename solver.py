@@ -58,6 +58,15 @@ class Solver:
         plt.ylim(0, 2)
         plt.show()
 
+    def print_ground_state(self):
+
+        for t in range(0, len(self.t)):
+            print(self.psi_t[t][0])
+
+    def print_ground_state_mag(self):
+        for t in range(0, len(self.t)):
+            print((np.conj(self.psi_t[t][0]) * self.psi_t[t][0])[0][0])
+
     def plot_ground_state(self):
 
         self.plot_basis_state(0)
@@ -76,11 +85,11 @@ class Solver:
 
             for t in range(0, len(self.psi_t)):
 
-                self.norm_t[n][t] = np.abs(self.psi_t[t][n]) ** 2
+                #print(np.conj(self.psi_t[t][n]) * self.psi_t[t][n])
+                self.norm_t[n][t] = np.abs((np.conj(self.psi_t[t][n]) * self.psi_t[t][n])[0][0]) ** 2
 
     def plot(self):
 
-        self.calc_prob()
         for n in range(0, self.dim):
 
             plt.plot(self.t, self.norm_t[n, :], markersize = 2.0, linewidth = 2.0, label = '|%d>' % n)

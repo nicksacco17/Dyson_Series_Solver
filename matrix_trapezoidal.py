@@ -25,6 +25,8 @@ class CN_Solver(Solver):
 
         for i in range(1, self.num_iterations):
 
+            if i % 100 == 0:
+                print(i)
             backwards_term = qutip.Qobj(shape = (self.dim, self.dim))
             forwards_term = qutip.Qobj(shape = (self.dim, self.dim))
 
@@ -33,7 +35,7 @@ class CN_Solver(Solver):
                 factor_kb = (1.0 / np.math.factorial(k)) * ((1j * self.time_step / 2) ** k)
                 factor_kf = (1.0 / np.math.factorial(k)) * ((-1j * self.time_step / 2) ** k)
                 
-                H_pow_k = self.H(self.t[i]) ** k
+                H_pow_k = self.H(self.t[i], args = None) ** k
             
                 backwards_term += (factor_kb * H_pow_k)
                 forwards_term += (factor_kf * H_pow_k)
@@ -43,7 +45,7 @@ class CN_Solver(Solver):
     def run_simulation(self):
 
         self.evolve()
-        self.plot()
+        #self.plot()
 
 class TISE_Solver(Solver):
 

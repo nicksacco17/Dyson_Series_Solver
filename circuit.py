@@ -73,7 +73,7 @@ class Dyson_Series_Solver(Solver):
             for k in range(1, self.K + 1):
 
                 print("ORDER k = %d" % k)
-                time_variables = np.zeros(k, dtype = np.int)
+                time_variables = np.zeros(k, dtype = np.double)
                 prefactor = ((-1j * self.T / self.r) ** k) / (self.M ** k * np.math.factorial(k))
 
                 total_iterations = self.M ** k
@@ -83,136 +83,44 @@ class Dyson_Series_Solver(Solver):
                 U_tilde = qutip.Qobj(shape = (self.dim, self.dim))
                 while it < total_iterations:
 
-                    if it % (100) == 0:
-                        print("ITERATION = %d" % it)
+                    if it % 1000 == 0:
+                            print(it)
                     for j in range(0, k):
 
                         if j == 0:
-                            #time_variables[j] = time_segment[it % self.M]
-                            time_variables[j] = it % self.M
+                            time_variables[j] = time_segment[it % self.M]
+                            #time_variables[j] = it % self.M
                         else:
                             #print("HERE")
-                            print(it / (self.M ** j))
+
+                            #print(it / (self.M ** (j + 1)))
+                            #print(int(np.floor(it / (self.M ** (j + 1)))))
                             #time_variables[j] = time_segment[int(it / (self.M ** j))]
-                            time_variables[j] = it / (self.M ** j)
-                    print(time_variables)
-                    #ordered_time_var = np.sort(time_variables)[::-1]
+                            time_variables[j] = time_segment[(int(it / (self.M ** j)) % self.M)]
+                            #time_variables[j] = (int(it / (self.M ** j)) % self.M)
+                            #time_variables[j] = 0
+                    #print(time_variables)
+                    #print(total_iterations)
+                    ordered_time_var = np.sort(time_variables)[::-1]
                     #print("TIME VAR = " + str(time_variables))
                     #print("TIME ORDERED TIME VAR = " + str(ordered_time_var))
 
-                    #U_temp = I_DIM
-                    #for tk in range(0, k):
+                    U_temp = I_DIM
+                    for tk in range(0, k):
 
                         #print("H(%d) = %s" % (tk, str(self.H(ordered_time_var[tk]))))
-                        #U_temp = U_temp * self.H(ordered_time_var[tk])
+                        U_temp = U_temp * self.H(ordered_time_var[tk], args = None)
                         #U_temp = np.matmul(U_temp, self.H(ordered_time_var[tk]))
                 
-                    #U_tilde += U_temp
+                    U_tilde += U_temp
                     #print(U_tilde)
                     it += 1
 
-                #U += (prefactor * U_tilde)
-                #print(U)
+                U += (prefactor * U_tilde)
             
-            #U += I_DIM
-            #self.psi_t[s] = U * self.psi0
-        '''
-        #print("FINAL U")
-        #print(U)
-
-def circuit_main():
-
-    H_TI = mat.asmatrix([[1, 2, 0], [2, 0, 2], [0, 2, -1]])
-
-    gamma = 0.5
- 
-    K = 3
-    M = 64
-
-    H0 = mat.asmatrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    H1 = mat.asmatrix([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-
-    H2 = mat.asmatrix([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-    H3 = mat.asmatrix([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
-    
-    H4 = mat.asmatrix([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-    H5 = mat.asmatrix([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
-
-    H6 = mat.asmatrix([[1, 0, 0], [0, 0, 1], [0, 1, 0]])
-    H7 = mat.asmatrix([[-1, 0, 0], [0, 0, 1], [0, 1, 0]])
-
-    H8 = mat.asmatrix([[1, 0, 0], [0, 0, 1], [0, 1, 0]])
-    H9 = mat.asmatrix([[-1, 0, 0], [0, 0, 1], [0, 1, 0]])
-
-    H10 = mat.asmatrix([[1, 0, 0], [0, 1, 0], [0, 0, -1]])
-    H11 = mat.asmatrix([[-1, 0, 0], [0, -1, 0], [0, 0, -1]])
-
-    H_ARRAY = [H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11]
-
-    H_SUM = mat.zeros((3, 3), dtype = np.cdouble)
-
-    L = len(H_ARRAY)
-
-    print(L)
-
-    for i in H_ARRAY:
-
-        H_SUM += i
-
-    H_SUM *= gamma
-
-    print(H_SUM)
-
-    U_tilde = mat.zeros((3, 3), dtype = np.cdouble)
-
-    T = 1
-
-    r = 1
-
-    k = 1
-
-    gamma_pow_k = (gamma * T / r) ** k
-    M_pow_k = M ** k
-    minus_i_pow_k = (-1j) ** k
-
-    for j in range(0, M):
-
-        print(j)
-        beta_j = gamma_pow_k / M_pow_k
-        
-        for l in range(0, L):
-
-            V_j = minus_i_pow_k * H_ARRAY[l]
-            U_tilde += beta_j * V_j
-
-    print(U_tilde)
-
-    k = 2
-
-    gamma_pow_k = (gamma * T / r) ** k
-    M_pow_k = M ** k
-    minus_i_pow_k = (-1j) ** k
-
-    for j1 in range(0, M):
-
-        for j2 in range(0, M):
-
-            if j1 <= j2:
-
-                if j1 == j2:
-                    repetitions = 2
-                else:
-                    repetitions = 1
-
-                beta_j = gamma_pow_k / (M_pow_k * repetitions)
-
-                for l1 in range(0, L):
-
-                    for l2 in range(0, L):
-
-                        V_j = minus_i_pow_k * np.matmul(H_ARRAY[l2], H_ARRAY[l1])
-
-                        U_tilde += beta_j * V_j
-
-    print(U_tilde)
-    '''
+            U += I_DIM
+            print(U)
+            if s == 0:
+                self.psi_t[s] = U * self.psi0
+            else:
+                self.psi_t[s] = U * self.psi_t[s - 1]
