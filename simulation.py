@@ -2,6 +2,7 @@ import numpy as np
 import numpy.matlib as mat
 
 import time as time
+import csv as csv
 
 import scipy as sp
 import scipy.linalg as la
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 import qutip as qutip
 
 from matrix_trapezoidal import CN_Solver
+from matrix_trapezoidal import TISE_Solver
 from qutip_verification import ME_Solver
 from circuit import Dyson_Series_Solver
 from Ising import Ising
@@ -40,6 +42,89 @@ def create_hermitian_matrix(N):
     hermitian_mat = qutip.Qobj(mat_H)
 
     return hermitian_mat
+
+def ising_test_case():
+
+    basic_network = PauliInteraction(N)
+
+    H_START = qutip.Qobj()
+    for i in range(N):
+        H_START += basic_network.get_ztensor(i)
+
+    eigenvalues_H_start, eigenkets_H_start = H_START.eigenstates()
+    
+    PSI_GND_i = eigenkets_H_start[0]
+    #E_GND_i = eigenvalues_H_start[0]
+
+    psi0 = qutip.Qobj(PSI_GND_i.data.toarray())
+    H_START_FORMATTED = qutip.Qobj(H_START.data.toarray())
+
+    for instance in range(0, len(HI.J_ARRAY)):
+
+        print("TEST CASE %d" % instance)
+        J = HI.J_ARRAY[instance]
+        h = HI.H_ARRAY[instance]
+
+        H_ISING = Ising(N, J, h, "X")
+        H_DRIVE = Ising(N, J, h, "Z")
+
+        eigenvalues_H_ising, eigenkets_H_ising = H_ISING.my_Hamiltonian.eigenstates()
+        PSI_GND_f = eigenkets_H_ising[0]
+        psi_f = qutip.Qobj(PSI_GND_f.data.toarray())
+        #E_GND_f = eigenvalues_H_ising[0]
+
+        H_DRIVE_FORMATTED = qutip.Qobj(H_DRIVE.my_Hamiltonian.data.toarray())
+        H_ISING_FORMATTED = qutip.Qobj(H_ISING.my_Hamiltonian.data.toarray())
+        
+        #time_dependent_H = lambda t, args: (1.0 - t/100) * H_START_FORMATTED + (t/100 * (1.0 - t/100)) * H_DRIVE_FORMATTED + t * H_ISING_FORMATTED
+        time_dependent_H = lambda t, args: (1.0 - t) * H_START_FORMATTED + (t * (1.0 - t)) * H_DRIVE_FORMATTED + t * H_ISING_FORMATTED
+
+        master_equation_solver = ME_Solver(simulation_time = 1, time_step = 1e-3, Hamiltonian = time_dependent_H, dimension = 128, init_state = psi0)         
+        trapezoidal_solver = CN_Solver(simulation_time = 1, time_step = 1e-3, Hamiltonian = time_dependent_H, dimension = 128, order = 2, init_state = psi0)   
+        dyson_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1, time_steps = 10, time_segments = 1000, Hamiltonian = time_dependent_H, dimension = 128, initial_state = psi0)
+
+        print("ME EVOLUTION...")
+        master_equation_solver.evolve()
+
+        print("CN EVOLUTION...")
+        trapezoidal_solver.evolve()
+
+        print("DS EVOLUTION...")
+        dyson_solver.evolve()
+
+        me_states = master_equation_solver.psi_t
+        cn_states = trapezoidal_solver.psi_t
+        ds_states = dyson_solver.psi_t
+
+        me_fidelity_array = []
+        
+        cn_fidelity_array = []
+        max_cn_error = 0.0
+
+        ds_fidelity_array = []
+        max_ds_error = 0.0
+        
+        for i in range(0, len(me_states)):
+            overlap = qutip.fidelity(me_states[i], psi_f) ** 2
+            me_fidelity_array.append(overlap)
+
+        for i in range(0, len(cn_states)):
+            overlap = qutip.fidelity(cn_states[i], psi_f) ** 2
+            cn_fidelity_array.append(overlap)
+        max_cn_error = np.max(np.abs(np.asarray(cn_fidelity_array) - np.asarray(me_fidelity_array)))
+        
+        for i in range(0, len(ds_states)):
+            overlap = qutip.fidelity(ds_states[i], psi_f) ** 2
+            ds_fidelity_array.append(overlap)
+        max_ds_error = np.max(np.abs(np.asarray(ds_fidelity_array) - np.asarray(me_fidelity_array)))
+
+        print("MAX CN ERROR = %e" % max_cn_error)
+        print("MAX DS ERROR = %e" % max_ds_error)
+        plt.plot(master_equation_solver.t, me_fidelity_array, 'r-', linewidth = 1.5, markersize = 1.5, label = 'ME')
+        plt.plot(trapezoidal_solver.t, cn_fidelity_array, 'b-', linewidth = 1.5, markersize = 1.5, label = 'CN')
+        plt.plot(dyson_solver.t, ds_fidelity_array, 'g-', linewidth = 1.5, markersize = 2.5, label = 'DS')
+        plt.legend()
+        plt.show()
 
 def ising_test():
 
@@ -135,6 +220,47 @@ def ising_test():
         self.current_ground_state_eigenkets[time_index] = temp_eigket[0]
     '''
 
+def TISE():
+
+    H_TI = qutip.Qobj([[1, 2, 0], [2, 0, 2], [0, 2, -1]])
+
+    H_TI_FUNC = lambda t, args : H_TI
+
+    psi0 = qutip.basis(3)
+
+    tise_solver = TISE_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TI, dimension = 3, init_state = psi0)
+    master_equation_solver = ME_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TI_FUNC, dimension = 3, init_state = psi0)
+    trapezoidal_solver = CN_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TI_FUNC, dimension = 3, order = 2, init_state = psi0)
+    dyson_solver = Dyson_Series_Solver(order = 3, start_time = 0, simulation_time = 1, time_steps = 10, time_segments = 100, Hamiltonian = H_TI_FUNC, dimension = 3, initial_state = psi0)
+
+    print("TI EVOLUTION...")
+    tise_solver.evolve()
+
+    print("ME EVOLUTION...")
+    master_equation_solver.evolve()
+
+    print("CN EVOLUTION...")
+    trapezoidal_solver.evolve()
+
+    print("DS EVOLUTION...")
+    dyson_solver.evolve()
+
+    ti_gnd_state = tise_solver.get_ground_state_probability()
+    me_gnd_state = master_equation_solver.get_ground_state_probability()
+    cn_gnd_state = trapezoidal_solver.get_ground_state_probability()
+    ds_gnd_state = dyson_solver.get_ground_state_probability()
+
+    plt.plot(tise_solver.t, ti_gnd_state, 'k*-', linewidth = 2.5, markersize = 1.5, label = 'TI')
+    plt.plot(master_equation_solver.t, me_gnd_state, 'r-', linewidth = 1.5, markersize = 1.5, label = 'ME')
+    plt.plot(trapezoidal_solver.t, cn_gnd_state, 'b-', linewidth = 1.5, markersize = 1.5, label = 'CN')
+    plt.plot(dyson_solver.t, ds_gnd_state, 'g-', linewidth = 1.5, markersize = 2.5, label = 'DS')
+    plt.legend()
+    plt.show()
+
+    print(len(tise_solver.t))
+    print(len(master_equation_solver.t))
+    print(len(trapezoidal_solver.t))
+    print(len(dyson_solver.t))
 
 def me_solver():
 
@@ -189,7 +315,6 @@ def me_solver():
 
     #fidelity_array = []
    
-
 def cn_driver():
 
     H_TI = qutip.Qobj([[1, 2, 0], [2, 0, 2], [0, 2, -1]])
@@ -259,6 +384,338 @@ def ds_driver():
 
     #solver.plot()
 
+def order_error():
+
+    me_simulation_time = []
+    cn_simulation_time = []
+    ds_simulation_time = []
+
+    cn_simulation_error = []
+    ds_simulation_error = []
+
+    NUM_QUBITS = 5
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    ORDER = np.linspace(0, 4, 5, dtype = int)
+
+    for k in ORDER:
+
+        print("ORDER = %d" % k)
+
+        # Create each of the solution methods
+        master_equation_solver = ME_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TD_FUNC, dimension = H_size, init_state = psi0)         
+        trapezoidal_solver = CN_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TD_FUNC, dimension = H_size, order = k, init_state = psi0)   
+        dyson_solver = Dyson_Series_Solver(order = k, start_time = 0, simulation_time = 1, time_steps = 10, time_segments = 100, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        # Evolve the system
+        print("ME EVOLUTION...")
+        start_time = time.time()
+        master_equation_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("ME TIME = %lf sec" % total_time)
+        me_simulation_time.append(total_time)
+
+        print("CN EVOLUTION...")
+        start_time = time.time()
+        trapezoidal_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("CN TIME = %lf sec" % total_time)
+        cn_simulation_time.append(total_time)
+
+        print("DS EVOLUTION...")
+        start_time = time.time()
+        dyson_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("DS TIME = %lf sec" % total_time)
+
+        # Obtain the probabilities of collapsing to the ground state
+        me_gnd_state_prob = master_equation_solver.get_ground_state_probability()
+        cn_gnd_state_prob = trapezoidal_solver.get_ground_state_probability()
+        ds_gnd_state_prob = dyson_solver.get_ground_state_probability()
+
+        # The maximum error is given as the maximum difference in collapse probabilities
+        max_cn_error = np.max(np.abs(np.asarray(cn_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+        max_ds_error = np.max(np.abs(np.asarray(ds_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+
+        print("MAX CN ERROR = %e" % max_cn_error)
+        print("MAX DS ERROR = %e" % max_ds_error)
+
+        cn_simulation_error.append(max_cn_error)
+        ds_simulation_error.append(max_ds_error)
+
+    wtr = csv.writer(open('order_error.csv', 'a'), delimiter=',', lineterminator=',')
+    wtr.writerow(["#SIMULATION TIME"])
+    wtr.writerow(['\n'])
+    for x in me_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+    wtr.writerow(["#SIMULATION ERROR"])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_error : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_error: wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+def step_error():
+
+    me_simulation_time = []
+    cn_simulation_time = []
+    ds_simulation_time = []
+
+    cn_simulation_error = []
+    ds_simulation_error = []
+
+    STEP_SIZE = np.logspace(-3, -1, 3)
+
+    NUM_QUBITS = 5
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for h in STEP_SIZE:
+
+        print("STEP SIZE = %e" % h)
+
+        # Create each of the solution methods
+        master_equation_solver = ME_Solver(simulation_time = 1, time_step = h, Hamiltonian = H_TD_FUNC, dimension = H_size, init_state = psi0)         
+        trapezoidal_solver = CN_Solver(simulation_time = 1, time_step = h, Hamiltonian = H_TD_FUNC, dimension = H_size, order = 2, init_state = psi0)   
+        dyson_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1, time_steps = 10, time_segments = int(1/h), Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        # Evolve the system
+        print("ME EVOLUTION...")
+        start_time = time.time()
+        master_equation_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("ME TIME = %lf sec" % total_time)
+        me_simulation_time.append(total_time)
+
+        print("CN EVOLUTION...")
+        start_time = time.time()
+        trapezoidal_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("CN TIME = %lf sec" % total_time)
+        cn_simulation_time.append(total_time)
+
+        print("DS EVOLUTION...")
+        start_time = time.time()
+        dyson_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("DS TIME = %lf sec" % total_time)
+        ds_simulation_time.append(total_time)
+
+        # Obtain the probabilities of collapsing to the ground state
+        me_gnd_state_prob = master_equation_solver.get_ground_state_probability()
+        cn_gnd_state_prob = trapezoidal_solver.get_ground_state_probability()
+        ds_gnd_state_prob = dyson_solver.get_ground_state_probability()
+
+        # The maximum error is given as the maximum difference in collapse probabilities
+        max_cn_error = np.max(np.abs(np.asarray(cn_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+        max_ds_error = np.max(np.abs(np.asarray(ds_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+
+        print("MAX CN ERROR = %e" % max_cn_error)
+        print("MAX DS ERROR = %e" % max_ds_error)
+
+        cn_simulation_error.append(max_cn_error)
+        ds_simulation_error.append(max_ds_error)
+
+    wtr = csv.writer(open('step_error.csv', 'a'), delimiter=',', lineterminator=',')
+    wtr.writerow(["#SIMULATION TIME"])
+    wtr.writerow(['\n'])
+    for x in me_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+    wtr.writerow(["#SIMULATION ERROR"])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_error : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_error: wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+def size_error():
+
+    me_simulation_time = []
+    cn_simulation_time = []
+    ds_simulation_time = []
+
+    cn_simulation_error = []
+    ds_simulation_error = []
+
+    NUM_QUBITS = 2
+
+    for N in range(1, NUM_QUBITS + 1):
+
+        H_size = int(2 ** N)
+
+        print("NUMBER OF QUBITS = %d" % N)
+
+        dense_hermitian_matrix = create_hermitian_matrix(H_size)
+        H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+        psi0 = qutip.basis(H_size)
+
+        # Create each of the solution methods
+        master_equation_solver = ME_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TD_FUNC, dimension = H_size, init_state = psi0)         
+        trapezoidal_solver = CN_Solver(simulation_time = 1, time_step = 1e-2, Hamiltonian = H_TD_FUNC, dimension = H_size, order = 2, init_state = psi0)   
+        dyson_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1, time_steps = 10, time_segments = 100, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        # Evolve the system
+        print("ME EVOLUTION...")
+        start_time = time.time()
+        master_equation_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("ME TIME = %lf sec" % total_time)
+        me_simulation_time.append(total_time)
+
+        print("CN EVOLUTION...")
+        start_time = time.time()
+        trapezoidal_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("CN TIME = %lf sec" % total_time)
+        cn_simulation_time.append(total_time)
+
+        print("DS EVOLUTION...")
+        start_time = time.time()
+        dyson_solver.evolve()
+        stop_time = time.time()
+        total_time = stop_time - start_time
+        print("DS TIME = %lf sec" % total_time)
+        ds_simulation_time.append(total_time)
+
+        # Obtain the probabilities of collapsing to the ground state
+        me_gnd_state_prob = master_equation_solver.get_ground_state_probability()
+        cn_gnd_state_prob = trapezoidal_solver.get_ground_state_probability()
+        ds_gnd_state_prob = dyson_solver.get_ground_state_probability()
+
+        # The maximum error is given as the maximum difference in collapse probabilities
+        max_cn_error = np.max(np.abs(np.asarray(cn_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+        max_ds_error = np.max(np.abs(np.asarray(ds_gnd_state_prob) - np.asarray(me_gnd_state_prob)))
+
+        print("MAX CN ERROR = %e" % max_cn_error)
+        print("MAX DS ERROR = %e" % max_ds_error)
+        cn_simulation_error.append(max_cn_error)
+        ds_simulation_error.append(max_ds_error)
+
+    wtr = csv.writer(open('size_error.csv', 'a'), delimiter=',', lineterminator=',')
+    wtr.writerow(["#SIMULATION TIME"])
+    wtr.writerow(['\n'])
+    for x in me_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_time : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+    wtr.writerow(["#SIMULATION ERROR"])
+    wtr.writerow(['\n'])
+    for x in cn_simulation_error : wtr.writerow ([x])
+    wtr.writerow(['\n'])
+    for x in ds_simulation_error: wtr.writerow ([x])
+    wtr.writerow(['\n'])
+
+def cn_size_test():
+
+    simulation_time = []
+    NUM_QUBITS = 10
+    
+    for N in range(1, NUM_QUBITS + 1):
+
+        H_size = int(2 ** N)
+        
+        print("DIMENSIONS = (%d, %d)" % (H_size, H_size))
+        dense_hermitian_matrix = create_hermitian_matrix(H_size)
+        H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+        psi0 = qutip.basis(H_size)
+
+        m_solver = CN_Solver(simulation_time = 1.0, time_step = 1e-4, Hamiltonian = H_TD_FUNC, dimension = H_size, order = 2, init_state = psi0)
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+    
+    np.savetxt("cn_size_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def cn_step_test():
+
+    simulation_time = []
+    STEP_SIZE = np.logspace(-3, -1, 3)
+
+    NUM_QUBITS = 5
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for h in STEP_SIZE:
+
+        print("STEP SIZE = %e" % h)
+        m_solver = CN_Solver(simulation_time = 1.0, time_step = h, Hamiltonian = H_TD_FUNC, dimension = H_size, order = 2, init_state = psi0)
+
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+
+    np.savetxt("cn_step_size_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def cn_order_test():
+
+    simulation_time = []
+    ORDER = np.linspace(0, 4, 5, dtype = int)
+
+    NUM_QUBITS = 5
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for k in ORDER:
+
+        print("ORDER = %d" % k)
+        m_solver = CN_Solver(simulation_time = 1.0, time_step = 1e-3, Hamiltonian = H_TD_FUNC, dimension = H_size, order = k, init_state = psi0)
+
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+
+    np.savetxt("cn_order_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+
 def me_step_test():
 
     simulation_time = []
@@ -275,7 +732,7 @@ def me_step_test():
 
         print("STEP SIZE = %e" % h)
         m_solver = ME_Solver(simulation_time = 1.0, time_step = h, Hamiltonian = H_TD_FUNC, dimension = H_size, init_state = psi0)
-        
+
         start_time = time.time()
         m_solver.evolve()
         stop_time = time.time()
@@ -296,6 +753,7 @@ def me_size_test():
 
         H_size = int(2 ** N)
         
+        print("DIMENSIONS = (%d, %d)" % (H_size, H_size))
         dense_hermitian_matrix = create_hermitian_matrix(H_size)
         H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
         psi0 = qutip.basis(H_size)
@@ -306,10 +764,120 @@ def me_size_test():
         stop_time = time.time()
 
         total_time = stop_time - start_time
-
+        print("SIMULATION TIME = %lf sec" % total_time)
         simulation_time.append(total_time)
     
     np.savetxt("me_size_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def ds_size_test():
+
+    simulation_time = []
+    NUM_QUBITS = 3
+    
+    for N in range(1, NUM_QUBITS + 1):
+
+        H_size = int(2 ** N)
+        
+        print("DIMENSIONS = (%d, %d)" % (H_size, H_size))
+
+        dense_hermitian_matrix = create_hermitian_matrix(H_size)
+        H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+        psi0 = qutip.basis(H_size)
+
+        m_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1.0, time_steps = 10, time_segments = 50, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+    
+    np.savetxt("ds_size_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def ds_step_test():
+
+    simulation_time = []
+    STEP_SIZE = np.logspace(1, 3, num = 3, dtype = int)
+
+    NUM_QUBITS = 3
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for M in STEP_SIZE:
+
+        print("STEP SIZE = %e" % M)
+        m_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1.0, time_steps = M, time_segments = 50, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+
+    np.savetxt("cn_step_size_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def ds_order_test():
+
+    simulation_time = []
+    ORDER = np.linspace(0, 4, 5, dtype = int)
+
+    NUM_QUBITS = 3
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for k in ORDER:
+
+        print("ORDER = %d" % k)
+        m_solver = Dyson_Series_Solver(order = k, start_time = 0, simulation_time = 1.0, time_steps = 10, time_segments = 50, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+
+    np.savetxt("cn_order_test.csv", np.asarray(simulation_time), delimiter = ",")
+
+def ds_segment_test():
+
+    simulation_time = []
+    SEGMENTS = np.arange(start = 5, stop = 105, step = 5)
+
+    NUM_QUBITS = 3
+    H_size = int(2 ** NUM_QUBITS)
+    dense_hermitian_matrix = create_hermitian_matrix(H_size)
+
+    H_TD_FUNC = lambda t, args : dense_hermitian_matrix * (1.0 - t ** 2)
+    psi0 = qutip.basis(H_size)
+
+    for r in SEGMENTS:
+
+        print("NUMBER OF TIME SEGMENTS = %d" % r)
+        m_solver = Dyson_Series_Solver(order = 2, start_time = 0, simulation_time = 1.0, time_steps = 10, time_segments = r, Hamiltonian = H_TD_FUNC, dimension = H_size, initial_state = psi0)
+
+        start_time = time.time()
+        m_solver.evolve()
+        stop_time = time.time()
+
+        total_time = stop_time - start_time
+        
+        print("SIMULATION TIME = %lf sec" % total_time)
+        simulation_time.append(total_time)
+
+    np.savetxt("cn_segment_test.csv", np.asarray(simulation_time), delimiter = ",")
 
 def plot_from_data(FILE_NAME, TITLE, X_LABEL, Y_LABEL):
 
@@ -331,11 +899,26 @@ if __name__ == '__main__':
     print("Approach III: QuTiP Verification")
     print("Approach IV: Parellization ")
 
+
+    #TISE()
+    #ising_test_case()
     #cn_driver()
     #me_solver()
     #ds_driver()
     #me_size_test()
-    me_step_test()
+    #cn_size_test()
+    #cn_step_test()
+    #cn_order_test()
+
+    #ds_size_test()
+    #ds_step_test()
+    #ds_segment_test()
+    #ds_order_test()
+
+    size_error()
+    #step_error()
+    #order_error()
+    #me_step_test()
 
     #plot_from_data(FILE_NAME = 'me_size_test.csv', TITLE = "Master Equation: Computation Time vs. Hamiltonian Size", X_LABEL = "Number of Qubits", Y_LABEL = "Computation Time (sec)")
 

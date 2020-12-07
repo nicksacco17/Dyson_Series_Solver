@@ -58,6 +58,14 @@ class Solver:
         plt.ylim(0, 2)
         plt.show()
 
+    def get_ground_state_probability(self):
+        
+        gnd_state_prob = np.ndarray(self.num_iterations, dtype = np.double)
+
+        for t in range(0, len(self.t)):
+            gnd_state_prob[t] = np.abs((np.conj(self.psi_t[t][0]) * self.psi_t[t][0])[0][0]) ** 2
+        return gnd_state_prob
+
     def print_ground_state(self):
 
         for t in range(0, len(self.t)):

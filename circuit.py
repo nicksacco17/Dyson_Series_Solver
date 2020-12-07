@@ -11,24 +11,6 @@ import matplotlib.pyplot as plt
 import qutip as qutip
 from solver import Solver
 
-def spectral_norm(H):
-
-    H_dagger = H.H
-    eigenvalues = la.eigvals(np.matmul(H_dagger, H))
-
-    max_eigval = np.max(eigenvalues)
-    return np.sqrt(max_eigval)
-
-class Circuit_Solver:
-
-    def __init__(self, num_qubits, H, error, simulation_time):
-
-        self.num_qubits = num_qubits
-        self.Hamiltonian = H
-        self.max_error = error
-        self.simulatin_time = simulation_time
-        self.dim = self.Hamiltonian.shape[0]
-
 class Dyson_Series_Solver(Solver):
 
     def __init__(self, order, start_time, simulation_time, time_steps, time_segments, Hamiltonian, dimension, initial_state):
@@ -47,9 +29,19 @@ class Dyson_Series_Solver(Solver):
         #self.t = np.linspace(0, simulation_time, self.num_iterations)
         
         self.t = np.linspace(self.t0, self.simulation_time, self.r)
+        self.t_eff = np.linspace(self.t0, self.simulation_time, int(self.r * self.M))
         self.psi_t = np.ndarray(self.r, dtype = qutip.Qobj)
         #self.psi_t = np.ndarray(self.num_iterations, dtype = qutip.Qobj)
         self.norm_t = np.ndarray((self.dim, self.r), dtype = np.double)
+
+    def get_ground_state_probability(self):
+        
+        gnd_state_prob = np.ndarray(len(self.psi_t), dtype = np.double)
+
+        for t in range(0, len(self.t)):
+            gnd_state_prob[t] = np.abs((np.conj(self.psi_t[t][0]) * self.psi_t[t][0])[0][0]) ** 2
+        return gnd_state_prob
+
 
     def evolve(self):
 
@@ -57,22 +49,20 @@ class Dyson_Series_Solver(Solver):
         I_DIM = qutip.qeye(self.dim)
         for s in range(0, self.r):
 
-            print("CURRENT TIME SEGMENT = %d" % s)
-
             segment_start_time = self.t0 + (s * self.T / self.r)
             segment_stop_time = self.t0 + (s + 1) * (self.T / self.r)
 
             time_segment = np.linspace(segment_start_time, segment_stop_time, num = self.M)
 
-            print("INTERVAL: [%lf --> %lf)" % (segment_start_time, segment_stop_time))
-            print(time_segment)
+            #print("INTERVAL: [%lf --> %lf)" % (segment_start_time, segment_stop_time))
+            #print(time_segment)
             
             U = mat.zeros((self.dim, self.dim), dtype = np.cdouble)
             U = qutip.Qobj(shape = (self.dim, self.dim))
 
             for k in range(1, self.K + 1):
 
-                print("ORDER k = %d" % k)
+                #print("ORDER k = %d" % k)
                 time_variables = np.zeros(k, dtype = np.double)
                 prefactor = ((-1j * self.T / self.r) ** k) / (self.M ** k * np.math.factorial(k))
 
@@ -83,8 +73,8 @@ class Dyson_Series_Solver(Solver):
                 U_tilde = qutip.Qobj(shape = (self.dim, self.dim))
                 while it < total_iterations:
 
-                    if it % 10000 == 0:
-                            print(it)
+                    #if it % 10000 == 0:
+                    #        print(it)
                     for j in range(0, k):
 
                         if j == 0:
@@ -119,7 +109,7 @@ class Dyson_Series_Solver(Solver):
                 U += (prefactor * U_tilde)
             
             U += I_DIM
-            print(U)
+            #print(U)
             if s == 0:
                 self.psi_t[s] = U * self.psi0
             else:

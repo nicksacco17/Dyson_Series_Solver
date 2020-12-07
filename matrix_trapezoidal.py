@@ -25,8 +25,6 @@ class CN_Solver(Solver):
 
         for i in range(1, self.num_iterations):
 
-            if i % 100 == 0:
-                print(i)
             backwards_term = qutip.Qobj(shape = (self.dim, self.dim))
             forwards_term = qutip.Qobj(shape = (self.dim, self.dim))
 
@@ -49,17 +47,16 @@ class CN_Solver(Solver):
 
 class TISE_Solver(Solver):
 
-    def __init__(self, simulation_time, time_step, Hamiltonian, init_state):
+    def __init__(self, simulation_time, time_step, Hamiltonian, dimension, init_state):
 
-        super().__init__(simulation_time, time_step, Hamiltonian, init_state)
+        super().__init__(simulation_time, time_step, Hamiltonian, dimension, init_state)
 
     def evolve(self):
         
-        t = np.linspace(0, self.simulation_time, self.num_iterations)
-
         for i in range(0, self.num_iterations):
 
-            self.psi_t[:, i] = np.matmul(la.expm(-1j * t[i] * self.H), self.psi0)
+            self.psi_t[i] = ((-1j * self.t[i] * self.H).expm()) * self.psi0
+            #self.psi_t[i] = np.matmul(la.expm(-1j * self.t[i] * self.H), self.psi0)
 
 def H_TD_FUNC(t):
     H_TI = mat.asmatrix([[1, 2, 0], [2, 0, 2], [0, 2, -1]])
